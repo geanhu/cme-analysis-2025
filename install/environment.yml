@@ -1,0 +1,9 @@
+name: cme_analysis_2025
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.10
+  - pyimagej
+  - openjdk=11
+  - cellpose
