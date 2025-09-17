@@ -7,3 +7,9 @@ dependencies:
   - pyimagej
   - openjdk=11
   - cellpose
+  - scikit-image
+  - pip
+  - pip:
+    - bioio
+    - bioio-nd2
+    - bioio-czi
