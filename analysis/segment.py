@@ -94,7 +94,21 @@ def cellpose(
     warnings.filterwarnings("ignore", category=UserWarning)
     skimage.io.imsave(os.path.join(result_dir, f'{name}-cells-mask.tif'), mask)
 
-    return mask
+    '''
+    Return puncta image
+    '''
+    puncta_channel_idx = 0
+    if 'G' in channel_order:
+        puncta_channel_idx = channel_order.index('G')
+    puncta_channel = io.open_bioformats(input)[puncta_channel_idx]
+    puncta_channel = preprocess.z_proj(
+        puncta_channel,
+        exclude_slices = 3
+    )
+    puncta_channel = ij.py.from_java(puncta_channel).values
+    skimage.io.imsave(os.path.join(result_dir, f'{name}-puncta-mip.tif'), puncta_channel)
+    
+    return mask, puncta_channel
 
 def puncta(
         input: str,
@@ -130,9 +144,6 @@ def puncta(
         channel_to_segment,
         exclude_slices = 3
     )
-    #save z proj but not edited to use for analysis
-    channel_save = ij.py.from_java(channel_to_segment).values
-    skimage.io.imsave(os.path.join(result_dir, f'{name}-puncta-mip.tif'), channel_save)
 
     channel_enhanced = preprocess.subtract_background(
         channel_to_segment
@@ -160,7 +171,7 @@ def puncta(
     labeled_array, num_objects = label(threshold_mask) # type: ignore
     skimage.io.imsave(os.path.join(result_dir, f'{name}-puncta-mask.tif'), labeled_array)
 
-    return labeled_array, num_objects, channel_save
+    return labeled_array, num_objects
 
 def main():
     return
