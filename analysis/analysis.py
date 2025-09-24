@@ -48,7 +48,6 @@ def puncta(
         name: str,
         result_dir: str,
         background_median = True,
-        puncta_threshold = 2
 ):
     '''
     Size

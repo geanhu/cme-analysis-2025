@@ -1,10 +1,21 @@
-from cellpose import models
+#internal
 from utils import preprocess
 from utils import io
+from analysis import analysis
+
+#external
 import os
 import skimage.io
 from scipy.ndimage import label
 import warnings
+import numpy as np
+from cellpose import models
+#---for stand-alone behavior
+import argparse
+from pathlib import Path
+import imagej
+import scyjava as sj
+import pandas as pd
 
 def cellpose(
         input: str,
@@ -88,6 +99,7 @@ def cellpose(
     diameter = 50
     masks, flows, styles, diams = model.eval([channel_to_segment], diameter=diameter, channels=[[0, 0]])
     mask = preprocess.fill_holes(masks[0], ij)
+    num_cells = np.unique(mask).shape[0]
     
     #save mask
     #Suppress low contrast warnings
@@ -108,21 +120,17 @@ def cellpose(
     puncta_channel = ij.py.from_java(puncta_channel).values
     skimage.io.imsave(os.path.join(result_dir, f'{name}-puncta-mip.tif'), puncta_channel)
     
-    return mask, puncta_channel
+    return mask, puncta_channel, num_cells
 
 def puncta(
         input: str,
         result_dir: str,
         name: str,
-        mask,
         ij,
+        threshold: int = 0
 ):
     #Suppress low contrast warnings
     warnings.filterwarnings("ignore", category=UserWarning)
-
-    #can also provide path to mask -> will open as np array
-    if type(mask) == str:
-        mask = skimage.io.imread(mask)
 
     '''
     Open fluorescence channel containing puncta
@@ -161,20 +169,89 @@ def puncta(
     macro_str='''
     setAutoThreshold("RenyiEntropy dark no-reset");
     setOption("BlackBackground", true);
-    run("Convert to Mask");
     '''
     ij.py.run_macro(macro_str)
+    if threshold == 0:
+        threshold = channel_enhanced.getProcessor().getMinThreshold()
+    else:
+        upper = channel_enhanced.getProcessor().getMaxThreshold()
+        ij.IJ.setThreshold(channel_enhanced, threshold, upper)
 
     #save label mask
+    macro_str = 'run("Convert to Mask");'
+    ij.py.run_macro(macro_str)
+    channel_enhanced = ij.IJ.getImage()
     threshold_mask = ij.py.from_java(channel_enhanced).values
     channel_enhanced.close()
     labeled_array, num_objects = label(threshold_mask) # type: ignore
     skimage.io.imsave(os.path.join(result_dir, f'{name}-puncta-mask.tif'), labeled_array)
 
-    return labeled_array, num_objects
+    return labeled_array, num_objects, threshold
 
 def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        'input',
+        help = "path to input file",
+        type = str
+    )
+    parser.add_argument(
+        'output_dir',
+        help = "path to output directory",
+        type = str
+    )
+    parser.add_argument(
+        '--threshold',
+        type = int,
+        default = 0
+    )
+    args = parser.parse_args()
+
+    #init ij
+    print("Initializing ImageJ ...")
+    ij = imagej.init(
+        ij_dir_or_version_or_endpoint='/Applications/Fiji.app',
+        mode = "headless",
+        add_legacy = True,
+    )
+
+    #segment puncta
+    print("Segmenting puncta ...")
+    name = Path(args.input).stem.replace('.', '')
+    mask, num_puncta, threshold = puncta(
+        args.input,
+        args.output_dir,
+        name,
+        ij,
+        args.threshold
+    )
+    print(f'{num_puncta} puncta segmented using threshold {threshold}')
+
+    #analyze
+    print("Analyzing puncta ...")
+    puncta_image = skimage.io.imread(f'{args.output_dir}/{name}-puncta-mip.tif')
+    cells_df = pd.read_csv(f'{args.output_dir}/{name}-cells.csv')
+    puncta_df = analysis.puncta(
+        puncta_mask = mask, # type: ignore
+        image = puncta_image,
+        name = name,
+        result_dir = args.output_dir
+    )
+    analysis.puncta_cells(
+        puncta_mask = mask, # type: ignore
+        cell_mask = skimage.io.imread(f'{args.output_dir}/{name}-cells-mask.tif'),
+        image = puncta_image,
+        puncta_df = puncta_df,
+        cells_df = cells_df,
+        name = name,
+        result_dir = args.output_dir
+    )
+
+    #force shutdown to kill waiting workers
+    #TODO: there is probably a cleaner solution to this
+    sj.jimport('java.lang.System').exit(0)
+    
     return
 
-if __name__ == "main":
+if __name__ == "__main__":
     main()
