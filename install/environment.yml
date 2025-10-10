@@ -8,6 +8,7 @@ dependencies:
   - openjdk=11
   - cellpose
   - scikit-image
+  - roifile
   - pip
   - pip:
     - bioio

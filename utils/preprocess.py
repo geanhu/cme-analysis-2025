@@ -66,13 +66,19 @@ def erosion(image, ij, radius=4):
 
     return erosion_image
 
-def median(image, ij, size=5):
+def median(image, ij, size=5, stack=True):
     #register image
     image.show()
 
+    #stack
+    if stack:
+        stack_str = ' stack'
+    else:
+        stack_str = ''
+
     #run macro
     macro_str = f"""
-    run("Median...", "radius={size} stack");
+    run("Median...", "radius={size}{stack_str}");
     """
     ij.py.run_macro(macro_str)
 

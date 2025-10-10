@@ -127,7 +127,7 @@ def puncta(
         result_dir: str,
         name: str,
         ij,
-        threshold: int = 0
+        threshold: float = 0.0
 ):
     #Suppress low contrast warnings
     warnings.filterwarnings("ignore", category=UserWarning)
@@ -152,30 +152,59 @@ def puncta(
         channel_to_segment,
         exclude_slices = 3
     )
+    
+    '''
+    TODO: this is not fair comparison
 
-    channel_enhanced = preprocess.subtract_background(
-        channel_to_segment
-    )
-    channel_enhanced = preprocess.gaussian_subtraction(
-        channel_enhanced,
-        ij
-    )
-        
+    Problem:
+    when finding threshold
+    - median -> Renyi -- method too stringent
+    - median -> Otsu -- creates weird shapes because not stringent enough
+    when applying threshold
+    - subtraction -> Z-score threshold -- method not stringent enough, admits noise
+    '''
+    if threshold == 0:
+        channel_enhanced = preprocess.subtract_background(
+            channel_to_segment
+        )
+        channel_enhanced = preprocess.gaussian_subtraction(
+            channel_enhanced,
+            ij
+        )
+    else:
+        channel_enhanced = preprocess.median(
+            channel_to_segment,
+            ij,
+            stack = False
+        )
+    
     '''
     Threshold puncta in each cell
     '''
     #Threshold -> creates 8-bit 0/255 mask
     channel_enhanced.show()
-    macro_str='''
-    setAutoThreshold("RenyiEntropy dark no-reset");
-    setOption("BlackBackground", true);
-    '''
-    ij.py.run_macro(macro_str)
-    if threshold == 0:
+    if threshold == 0.0:
+        print('Finding threshold ...')
+        macro_str='''
+        setAutoThreshold("RenyiEntropy dark no-reset");
+        setOption("BlackBackground", true);
+        ''' 
+        ij.py.run_macro(macro_str)
         threshold = channel_enhanced.getProcessor().getMinThreshold()
     else:
         upper = channel_enhanced.getProcessor().getMaxThreshold()
+        #calculate threshold from z-score
+        stats = channel_enhanced.getStatistics()
+        threshold = int(threshold * stats.stdDev + stats.mean)
+        print(threshold) #sanity check setting threshold
         ij.IJ.setThreshold(channel_enhanced, threshold, upper)
+    
+    #find threshold z
+    stats = channel_enhanced.getStatistics()
+    if stats.stdDev > 0:
+        threshold_z = (threshold - stats.mean) / stats.stdDev
+    else:
+        threshold_z = threshold
 
     #save label mask
     macro_str = 'run("Convert to Mask");'
@@ -186,7 +215,7 @@ def puncta(
     labeled_array, num_objects = label(threshold_mask) # type: ignore
     skimage.io.imsave(os.path.join(result_dir, f'{name}-puncta-mask.tif'), labeled_array)
 
-    return labeled_array, num_objects, threshold
+    return labeled_array, num_objects, threshold_z
 
 def main():
     parser = argparse.ArgumentParser()

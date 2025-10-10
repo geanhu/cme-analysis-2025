@@ -142,8 +142,7 @@ def puncta_cells(
     )
 
     '''
-    Distance to edge
-    '''
+    Distance to edge - disabled, since should be applied to middle focal plane instead
     #find cell edges
     cell_boundaries = find_boundaries(cell_mask, mode='inner')
 
@@ -159,6 +158,7 @@ def puncta_cells(
     distances = distance_map[centroids_y, centroids_x] # type: ignore
     distances = [np.nan] + list(distances) #undefined for background
     puncta_df['distance_to_edge'] = distances
+    '''
 
     puncta_df.to_csv(os.path.join(result_dir, f'{name}-puncta.csv'))
     cells_df.to_csv(os.path.join(result_dir, f'{name}-cells.csv'))
