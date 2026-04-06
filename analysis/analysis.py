@@ -23,6 +23,7 @@ def cells(
     #intensity
     integrated_intensities = ndimage.sum_labels(image, labels=cell_mask, index=ids)
     mean_intensities = ndimage.mean(image, labels=cell_mask, index=ids)
+    median_intensities = ndimage.median(image, labels=cell_mask, index=ids)
 
     #background (median)
     background_mask = (cell_mask == 0)
@@ -34,8 +35,10 @@ def cells(
     cells_df['integrated_intensity'] = integrated_intensities
     if background_median:
         cells_df['mean_intensity'] = [background_intensity] + list(mean_intensities[1:])
+        cells_df['median_intensity'] = median_intensities
     else:
         cells_df['mean_intensity'] = mean_intensities
+        cells_df['median_intensity'] = mean_intensities[0] + list(median_intensities[1:])
 
     #save dataframe
     cells_df.to_csv(os.path.join(result_dir, f'{name}-cells.csv'))
@@ -209,6 +212,6 @@ def find_c_l(
     cytoplasm = image[cytoplasm_mask]
     if cytoplasm.size == 0:
         return np.nan #prevent zero division
-    cytoplasm_int = float(np.mean(cytoplasm))
+    cytoplasm_int = float(np.median(cytoplasm)) 
     
     return cytoplasm_int
