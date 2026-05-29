@@ -27,7 +27,7 @@ def cellpose(
         ij,
         name: str,
         save_intermediate: bool,
-        exclude_slices: int = 0,
+        exclude_slices: int = 0
 ):
 
     '''
@@ -41,7 +41,7 @@ def cellpose(
     subtract_background = True
     photobleaching_correction = False #TODO: fix
     median = True
-    erosion = False #TODO: fix
+    erosion = False
 
     #1. Use transilluminated channel
     if 'T' in channel_order: 
@@ -116,22 +116,36 @@ def cellpose(
     puncta_channel_idx = 0
     if 'G' in channel_order:
         puncta_channel_idx = channel_order.index('G')
-    puncta_channel = io.open_bioformats(input)[puncta_channel_idx]
+    puncta_channel_original = io.open_bioformats(input)[puncta_channel_idx]
+
+    # Max project
     puncta_channel = preprocess.z_proj(
-        puncta_channel,
+        puncta_channel_original,
         exclude_slices = 3
     )
     puncta_channel = ij.py.from_java(puncta_channel).values
     skimage.io.imsave(os.path.join(result_dir, f'{name}-puncta-mip.tif'), puncta_channel)
+
+    # Sum project
+    puncta_channel = preprocess.z_proj(
+        puncta_channel_original,
+        method = 'sum',
+        exclude_slices = 3
+    )
+    puncta_channel = ij.py.from_java(puncta_channel).values
+    skimage.io.imsave(os.path.join(result_dir, f'{name}-puncta-sum.tif'), puncta_channel)
     
     return mask, puncta_channel, num_cells
 
+'''
+!! Not used
+'''
 def puncta(
         input: str,
         result_dir: str,
         name: str,
         ij,
-        threshold: float = 0.0
+        threshold: float = 0.0,
 ):
     #Suppress low contrast warnings
     warnings.filterwarnings("ignore", category=UserWarning)
@@ -226,10 +240,16 @@ def puncta(
 def puncta_local(
         result_dir: str,
         name: str,
-        cell_mask
+        cell_mask,
+        log_threshold : float = 3.5,
+        watershed_threshold : float = 3.0,
+        projection = 'sum'
 ):
     #open image
-    puncta_image = skimage.io.imread(f'{result_dir}/{name}-puncta-mip.tif')
+    if projection == 'maximum':
+        puncta_image = skimage.io.imread(f'{result_dir}/{name}-puncta-mip.tif')
+    else:
+        puncta_image = skimage.io.imread(f'{result_dir}/{name}-puncta-sum.tif')
     puncta_image = puncta_image.astype(float) #convert to float to prevent underflow during background subtraction
     
     #subtract background (cell 0) average
@@ -259,8 +279,8 @@ def puncta_local(
 
         #2. Identify puncta centers by LoG
         num_cell_response = max_response[num_cell_mask]
-        log_threshold = np.median(num_cell_response) + (3.5 * scipy.stats.median_abs_deviation(num_cell_response, scale='normal'))
-        log_peaks_mask = (max_response * num_cell_mask) > log_threshold
+        log_threshold_cell = np.median(num_cell_response) + (log_threshold * scipy.stats.median_abs_deviation(num_cell_response, scale='normal'))
+        log_peaks_mask = (max_response * num_cell_mask) > log_threshold_cell
         seeds = peak_local_max(
             max_response * num_cell_mask,
             min_distance = 5, #peaks must be 5 px apart
@@ -271,7 +291,7 @@ def puncta_local(
         markers = np.zeros_like(puncta_image, dtype=int)
         for i, (row, col) in enumerate(seeds):
             markers[row, col] = puncta_num + i
-        watershed_limit = (puncta_image > (num_cell_med + 3 * num_cell_mad)) & num_cell_mask
+        watershed_limit = (puncta_image > (num_cell_med + watershed_threshold * num_cell_mad)) & num_cell_mask
         segmented_puncta = watershed(-puncta_image, markers, mask=watershed_limit)
 
         #5. Store into puncta_mask
@@ -279,7 +299,7 @@ def puncta_local(
         puncta_num += len(seeds)
 
     #4. Throw away small areas (noise)
-    puncta_mask = remove_small_objects(puncta_mask, min_size=9)
+    puncta_mask = remove_small_objects(puncta_mask, min_size=5)
     skimage.io.imsave(os.path.join(result_dir, f'{name}-puncta-mask.tif'), puncta_mask)
 
     return puncta_mask, np.unique(puncta_mask).shape[0] - 1
