@@ -11,7 +11,8 @@ def cellpose(
         run_photobleaching_correction: bool = True,
         exclude_slices = 0,
         run_median: bool = True,
-        run_erosion: bool = True
+        run_erosion: bool = True,
+        crop: int = 100
 ):
     step_counter = 1
 
@@ -31,10 +32,10 @@ def cellpose(
                 ij.IJ.saveAsTiff(channel, os.path.join(output_dir, f"{step_counter}-photobleaching-correction.tif"))
             step_counter += 1
 
-    #3. Z Proj, sum
-    channel = z_proj(channel, method='sum', exclude_slices=exclude_slices)
+    #3. Z Proj
+    channel = z_proj(channel, method='max', exclude_slices=exclude_slices)
     if save_intermediate and output_dir:
-        ij.IJ.saveAsTiff(channel, os.path.join(output_dir, f"{step_counter}-sum-projection.tif"))
+        ij.IJ.saveAsTiff(channel, os.path.join(output_dir, f"{step_counter}-max-projection.tif"))
     step_counter += 1
 
     #4. Median = 5
@@ -209,3 +210,6 @@ def gaussian_subtraction(image, ij, sigma=10):
     blurred.close()
 
     return enhanced
+
+def crop(image, amount=100):
+    return image[amount:-amount, amount:-amount]

@@ -27,7 +27,9 @@ def cellpose(
         ij,
         name: str,
         save_intermediate: bool,
-        exclude_slices: int = 0
+        exclude_slices: int = 0,
+        projection = 'sum',
+        crop = 100
 ):
 
     '''
@@ -96,6 +98,9 @@ def cellpose(
     channel_to_segment = ij.py.from_java(channel_to_segment).values
     assert len(channel_to_segment.shape) == 2, channel_to_segment.shape
 
+    #crop
+    channel_to_segment = preprocess.crop(channel_to_segment, amount = crop)
+
     #setup Cellpose
     model = models.Cellpose(gpu=True, model_type='cyto')
 
@@ -123,8 +128,9 @@ def cellpose(
         puncta_channel_original,
         exclude_slices = 3
     )
-    puncta_channel = ij.py.from_java(puncta_channel).values
-    skimage.io.imsave(os.path.join(result_dir, f'{name}-puncta-mip.tif'), puncta_channel)
+    puncta_channel_max = ij.py.from_java(puncta_channel).values
+    puncta_channel_max = preprocess.crop(puncta_channel_max, amount = crop)
+    skimage.io.imsave(os.path.join(result_dir, f'{name}-puncta-mip.tif'), puncta_channel_max)
 
     # Sum project
     puncta_channel = preprocess.z_proj(
@@ -132,8 +138,14 @@ def cellpose(
         method = 'sum',
         exclude_slices = 3
     )
-    puncta_channel = ij.py.from_java(puncta_channel).values
-    skimage.io.imsave(os.path.join(result_dir, f'{name}-puncta-sum.tif'), puncta_channel)
+    puncta_channel_sum = ij.py.from_java(puncta_channel).values
+    puncta_channel_sum = preprocess.crop(puncta_channel_sum, amount = crop)
+    skimage.io.imsave(os.path.join(result_dir, f'{name}-puncta-sum.tif'), puncta_channel_sum)
+
+    if projection == 'sum':
+        puncta_channel = puncta_channel_sum
+    else:
+        puncta_channel = puncta_channel_max
     
     return mask, puncta_channel, num_cells
 
@@ -246,10 +258,7 @@ def puncta_local(
         projection = 'sum'
 ):
     #open image
-    if projection == 'maximum':
-        puncta_image = skimage.io.imread(f'{result_dir}/{name}-puncta-mip.tif')
-    else:
-        puncta_image = skimage.io.imread(f'{result_dir}/{name}-puncta-sum.tif')
+    puncta_image = skimage.io.imread(f'{result_dir}/{name}-puncta-mip.tif')
     puncta_image = puncta_image.astype(float) #convert to float to prevent underflow during background subtraction
     
     #subtract background (cell 0) average
