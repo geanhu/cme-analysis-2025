@@ -31,16 +31,23 @@ def parse_channels(path: str) -> list:
     '''
     #setup list
     channels = []
+    GFP_names = ['GFP', '488']
+    TD_names = ['TD']
     
     #try parsing channel names first
     names = bioio.BioImage(path).channel_names
     for name in names:
         #green
-        if 'GFP' in name:
-            channels.append('G')
+        classified = False
+        for short_name in GFP_names:
+            if short_name in name:
+                channels.append('G')
+                classified = True
         #TD
-        elif 'TD' in name:
-            channels.append('T')
+        if not classified:
+            for short_name in TD_names:
+                if short_name in name:
+                    channels.append('T')
         #TODO: blue, red
     
     return channels
