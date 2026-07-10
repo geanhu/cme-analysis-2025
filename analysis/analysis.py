@@ -140,7 +140,11 @@ def puncta_cells(
     
     #C_L
     cells_df['c_l'] = cells_df.apply(
-        lambda row: find_c_l(row, puncta_mask, cell_mask, puncta_df, image),
+        lambda row: find_c_l(row, puncta_mask, cell_mask, puncta_df, image, 'median'),
+        axis = 1
+    )
+    cells_df['c_l_mean'] = cells_df.apply(
+        lambda row: find_c_l(row, puncta_mask, cell_mask, puncta_df, image, 'mean'),
         axis = 1
     )
 
@@ -193,6 +197,7 @@ def find_c_l(
     cell_mask: np.ndarray,
     puncta_df: pd.DataFrame,
     image: np.ndarray,
+    mode: str = 'median',
 ):
     #find all puncta in cell
     cell_id = row.name
@@ -212,6 +217,11 @@ def find_c_l(
     cytoplasm = image[cytoplasm_mask]
     if cytoplasm.size == 0:
         return np.nan #prevent zero division
-    cytoplasm_int = float(np.median(cytoplasm)) 
+    if mode == 'median':
+        cytoplasm_int = float(np.median(cytoplasm)) 
+    elif mode == 'mean':
+        cytoplasm_int = float(np.mean(cytoplasm))
+    else:
+        return np.nan
     
     return cytoplasm_int
